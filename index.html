@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Pagu Keluarga Langit</title>
+<title>Q Family Finance</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
 <style>
 :root{--bg:#f6f5f1;--card:#fff;--tx:#1d2420;--mu:#6b746e;--bd:#dcdad2;--ac:#1f7a5a;--ac2:#e3f2ec;--rd:#c0392b;--am:#b7791f;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
@@ -138,10 +138,42 @@ header,nav,main{position:relative;z-index:1}
 </style>
 </head>
 <body>
+
+<section id="cloudAuth" style="grid-column:1/-1;max-width:560px;margin:24px auto;padding:18px;background:#101638;border:1px solid #27316e;border-radius:18px;color:#e8edff;position:relative;z-index:5">
+  <h2 style="font-size:19px;margin:0 0 6px;color:#fff">☁️ Hubungkan Q Family Finance</h2>
+  <p style="font-size:13px;color:#aeb9e8;margin:0 0 14px">Masukkan konfigurasi Supabase dan akun Anda. Data keuangan akan disimpan di database online dan dapat dibuka dari perangkat lain.</p>
+  <details style="margin-bottom:14px;background:#0b1232;padding:12px;border-radius:10px">
+    <summary style="cursor:pointer;font-weight:700">1. Konfigurasi Supabase (cukup sekali per browser)</summary>
+    <p style="font-size:12px;color:#aeb9e8">Ambil Project URL dan publishable/anon key dari Supabase → Project Settings → API. Jangan gunakan service_role key.</p>
+    <label style="display:block;margin:8px 0;color:#dce4ff">Supabase Project URL
+      <input id="sbUrl" type="url" placeholder="https://xxxxxxxx.supabase.co" style="display:block;width:100%;margin-top:4px">
+    </label>
+    <label style="display:block;margin:8px 0;color:#dce4ff">Publishable key / anon public key
+      <textarea id="sbKey" rows="3" placeholder="sb_publishable_... atau anon key (eyJ...)" style="display:block;width:100%;margin-top:4px;resize:vertical"></textarea>
+    </label>
+    <button id="saveSbConfig" class="pri" type="button">Simpan konfigurasi</button>
+    <span id="configMsg" style="font-size:12px;margin-left:8px"></span>
+  </details>
+  <h3 style="font-size:15px;margin:10px 0">2. Masuk ke akun keluarga</h3>
+  <label style="display:block;margin:8px 0;color:#dce4ff">Email
+    <input id="authEmail" type="email" autocomplete="username" placeholder="email@example.com" style="display:block;width:100%;margin-top:4px">
+  </label>
+  <label style="display:block;margin:8px 0;color:#dce4ff">Password
+    <input id="authPassword" type="password" autocomplete="current-password" placeholder="Minimal 6 karakter" style="display:block;width:100%;margin-top:4px">
+  </label>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+    <button id="loginBtn" class="pri" type="button">Masuk</button>
+    <button id="signupBtn" type="button">Buat akun baru</button>
+  </div>
+  <p id="authMsg" role="status" style="font-size:12px;color:#cbd5ff;margin:12px 0 0">Data transaksi disimpan per akun. Gunakan akun yang sama di HP dan laptop.</p>
+  <p style="font-size:11px;color:#8f9bc8;margin:12px 0 0">Catatan: lampiran gambar yang sudah ada saat ini masih berada di penyimpanan lokal browser. Sinkronisasi lampiran ke Supabase Storage memerlukan tahap tambahan.</p>
+</section>
+
 <div id="sky"></div>
-<header><div class="hero"><div><h1>🧑‍🚀 Pagu Keluarga Langit</h1><p>Welcome to QP Family Financial Management</p><div class="pp" id="pp"></div></div><div class="hb" id="hb"></div></div></header>
+<header><div class="hero"><div><h1>🧑‍🚀 Q Family Finance</h1><p>Family Financial Management</p><div class="pp" id="pp"></div></div><div><div class="hb" id="hb"></div><button id="logoutBtn" type="button" style="display:none;margin-top:6px;background:#ffffff20;color:#fff;border-color:#ffffff55">Keluar</button><div id="cloudStatus" style="font-size:11px;text-align:right;margin-top:6px;color:#d9e7ff">Belum terhubung</div></div></div></header>
 <nav id="nav"></nav>
 <main id="app"></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const K='pagu_langit_v1';
 const R=n=>(n<0?'-':'')+'Rp'+Math.round(Math.abs(n||0)).toLocaleString('id-ID');
@@ -167,12 +199,93 @@ rab:[{cat:'Kerjaan',items:[['Mas Rizky',1e6],['Paspor',1e6],['Buku Pelaut',5e5],
 {cat:'Kuliah',items:[['Biaya Sempro',1e6],['Transport Sempro',1.5e6],['Akomodasi Sempro + makan',1.5e6],['Celana kain hitam untuk sempro',5e5],['Semester 3',1.3e7],['Servis Laptop',1e6],['Starlink bulan pertama kapal depan',4.5e6]]},
 {cat:'Pribadi',items:[['Periksa gigi',1e6],['Paketan 4 bulan di rumah',4e5],['Uang saku 4 bulan di rumah',2e6]]}].map(g=>({cat:g.cat,items:g.items.map(([n,v])=>({n,v}))})),
 tpl:{judul:'LAPORAN ANGGARAN KELUARGA LANGIT',detail:true,catatan:true,hanyaLebih:false}}}
-let S;try{S=JSON.parse(localStorage.getItem(K))}catch(e){}
+let S;
 const seedPrj=()=>({pajak:[{n:'Pajak kendaraan',v:5e6,t:''}],inv:[{n:'Instrumen 1 (ubah sesuai kebutuhan)',b:0,v:0}],hor:3,cicil:18600000,kpr:{pokok:5e8,margin:2.2e8,tenor:15,paid:27,inc:4e7,bsi:3e7,ibu:1e7,dur:18},hut:[['Hutang awal',95600000],['Tambah Starlink',6e6],['Baju Bunda',7e5],['Ibu',3e8],['BSI',5.33e8],['Gaji Bunda 24 bulan',1.92e8]].map(([n,v])=>({n,v}))});
 function fix(){if(S.saldo0==null)S.saldo0=0;if(S.defisit==null)S.defisit=true;if(!S.prj)S.prj=seedPrj();const d=seedPrj();for(const k of ['pajak','inv','hor','cicil'])if(S.prj[k]==null)S.prj[k]=d[k];S.prj.inv.forEach(x=>{if(x.b==null){x.b=+x.a||0;x.v=x.b}if(x.q==null)x.q=1});if(!S.cal)S.cal=[];if(!S.saldoY)S.saldoY={};if(S.tab==='kal')S.tab='bln';if(S.tab==='dat')S.tab='bln';if(S.tab==='rab')S.tab='scn';S.scns.forEach(s=>s.name=String(s.name).replace(/^KAK\s*/i,''))}
 if(!S||!S.months)S=seed();fix();
 let REP=null;
-const save=()=>{if(S.ryr&&S.yr)S.yr[S.ryr]={scns:S.scns,rab:S.rab,scn:S.scn,deb:S.deb,kb:S.kb};try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}};
+let sbClient=null, cloudUser=null, cloudReady=false, cloudSaveTimer=null, cloudSaving=false;
+const cloudStatus=(msg,ok=false)=>{const el=document.getElementById('cloudStatus');if(el){el.textContent=msg;el.style.color=ok?'#9ff3ce':'#ffe0a3'}};
+const save=()=>{
+  if(S.ryr&&S.yr)S.yr[S.ryr]={scns:S.scns,rab:S.rab,scn:S.scn,deb:S.deb,kb:S.kb};
+  // Cache lokal hanya sebagai cadangan/offline; sumber sinkronisasi utama adalah Supabase.
+  try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}
+  if(!cloudReady||!cloudUser)return;
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer=setTimeout(pushCloud,650);
+};
+async function pushCloud(){
+  if(!cloudReady||!cloudUser||!S)return;
+  cloudSaving=true;cloudStatus('Menyimpan ke cloud…');
+  const payload={user_id:cloudUser.id,data:S,updated_at:new Date().toISOString()};
+  const {error}=await sbClient.from('family_finance_data').upsert(payload,{onConflict:'user_id'});
+  cloudSaving=false;
+  if(error){cloudStatus('Gagal sinkron: '+error.message);console.error('Supabase save:',error);return}
+  cloudStatus('Tersimpan di cloud ✓',true);
+}
+async function openFamilyApp(user){
+  cloudUser=user;
+  const {data,error}=await sbClient.from('family_finance_data').select('data').eq('user_id',user.id).maybeSingle();
+  if(error){document.getElementById('authMsg').textContent='Tidak dapat membaca database: '+error.message;return}
+  if(data&&data.data&&data.data.months){
+    S=data.data;
+  }else{
+    // Migrasikan data lama dari browser asal ke cloud saat pertama kali login.
+    let legacy=null;try{legacy=JSON.parse(localStorage.getItem(K)||'null')}catch(e){}
+    S=legacy&&legacy.months?legacy:seed();
+    fix();
+    const {error:saveError}=await sbClient.from('family_finance_data').upsert(
+      {user_id:user.id,data:S,updated_at:new Date().toISOString()},{onConflict:'user_id'}
+    );
+    if(saveError){document.getElementById('authMsg').textContent='Akun berhasil masuk, tetapi penyimpanan awal gagal: '+saveError.message;return}
+  }
+  fix();cloudReady=true;
+  document.getElementById('cloudAuth').style.display='none';
+  document.querySelector('header').style.display='';
+  document.querySelector('nav').style.display='';
+  document.querySelector('main').style.display='';
+  cloudStatus('Terhubung: '+(user.email||'akun keluarga'),true);
+  const logout=document.getElementById('logoutBtn');if(logout){logout.style.display='inline-block';logout.onclick=async()=>{await sbClient.auth.signOut();cloudReady=false;cloudUser=null;location.reload()}}
+  render();
+}
+async function initCloud(){
+  document.querySelector('header').style.display='none';
+  document.querySelector('nav').style.display='none';
+  document.querySelector('main').style.display='none';
+  const cfg=(()=>{try{return JSON.parse(localStorage.getItem('qff_supabase_config')||'{}')}catch(e){return {}}})();
+  const urlInput=document.getElementById('sbUrl'),keyInput=document.getElementById('sbKey');
+  if(urlInput)urlInput.value=cfg.url||'';
+  if(keyInput)keyInput.value=cfg.key||'';
+  const msg=document.getElementById('authMsg');
+  function connect(){
+    const url=(document.getElementById('sbUrl').value||'').trim();
+    const key=(document.getElementById('sbKey').value||'').trim();
+    if(!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(url)||!key){msg.textContent='Periksa Project URL dan publishable/anon key.';return false}
+    try{localStorage.setItem('qff_supabase_config',JSON.stringify({url,key}));sbClient=window.supabase.createClient(url,key);msg.textContent='Konfigurasi tersimpan. Silakan masuk atau buat akun.';return true}
+    catch(e){msg.textContent='Konfigurasi tidak valid: '+e.message;return false}
+  }
+  if(cfg.url&&cfg.key){try{sbClient=window.supabase.createClient(cfg.url,cfg.key)}catch(e){msg.textContent=e.message}}
+  document.getElementById('saveSbConfig').onclick=()=>{if(connect())document.getElementById('configMsg').textContent='✓ tersimpan'};
+  async function auth(mode){
+    if(!sbClient&&!connect())return;
+    const email=document.getElementById('authEmail').value.trim();
+    const password=document.getElementById('authPassword').value;
+    if(!email||password.length<6){msg.textContent='Masukkan email dan password minimal 6 karakter.';return}
+    msg.textContent='Memproses…';
+    const result=mode==='signup'
+      ? await sbClient.auth.signUp({email,password})
+      : await sbClient.auth.signInWithPassword({email,password});
+    if(result.error){msg.textContent=result.error.message;return}
+    if(result.data.session){await openFamilyApp(result.data.user)}
+    else{msg.textContent='Pendaftaran berhasil. Periksa email untuk verifikasi, lalu masuk kembali.'}
+  }
+  document.getElementById('loginBtn').onclick=()=>auth('login');
+  document.getElementById('signupBtn').onclick=()=>auth('signup');
+  if(sbClient){
+    const {data}=await sbClient.auth.getSession();
+    if(data.session){await openFamilyApp(data.session.user);return}
+  }
+}
 const num=v=>+v||0;
 const M=()=>S.months.find(m=>m.id===S.cur)||S.months[0];
 const pool=m=>(num(m.gaji)-num(m.pot))*num(m.kurs)-num(m.sisih);
@@ -305,7 +418,7 @@ function lbox(src){const d=document.createElement('div');d.style.cssText='positi
 function loadImgs(){const fi=document.getElementById('fup');if(fi)fi.onchange=async e=>{const m=M();m.files=m.files||[];for(const f of e.target.files){if(!/^image\//.test(f.type))continue;if(m.files.length>=6){alert('Maksimal 6 file per bulan. Hapus salah satu untuk menambah.');break}const b=await shrink(f),id='f'+Date.now()+Math.random().toString(36).slice(2,6);try{await idbPut(id,b);m.files.push({id,name:f.name.replace(/\.\w+$/,'')+'.jpg',size:b.size})}catch(x){alert('Gagal menyimpan '+f.name)}}save();render()};document.querySelectorAll('img[data-fid]').forEach(async im=>{try{const b=await idbGet(im.dataset.fid);if(b)im.src=URL.createObjectURL(b)}catch(x){}})}
 function vFiles(){const m=M(),fs=m.files||[];return `<div class="card"><h2>Lampiran ${esc(m.name)} (JPG)</h2><label style="flex-direction:row;align-items:center;gap:8px"><input type="file" id="fup" accept="image/*" multiple ${fs.length>=6?'disabled':''}></label><p class="hint">Unggah foto nota atau bukti (JPG atau PNG), maksimal 6 file per bulan (${fs.length}/6). Gambar diperkecil otomatis dan disimpan di browser ini, tidak ikut dalam cadangan JSON.</p>${fs.length?`<div class="fg">${fs.map(f=>`<div class="fi"><button class="imgb" data-a="fview" data-v="${f.id}" title="Klik untuk memperbesar"><img data-fid="${f.id}" alt="${esc(f.name)}"></button><div class="hint" style="word-break:break-all">${esc(f.name)}</div><button data-a="fdl" data-v="${f.id}">Unduh</button> <button class="x" data-a="fdel" data-v="${f.id}">Hapus</button></div>`).join('')}</div>`:'<p class="hint">Belum ada lampiran.</p>'}</div>`}
 function vDat(){return vFiles()+vDat0()}
-function vDat0(){return `<div class="card"><h2>Cadangan data</h2><div class="gap"><button class="pri" data-a="exp">Unduh cadangan (JSON)</button><label style="display:inline-flex"><input type="file" id="imp" accept=".json"></label><button class="x" data-a="reset">Reset ke data awal</button></div><p class="hint">Data hanya tersimpan di browser ini. Unduh cadangan secara berkala.</p></div>`}
+function vDat0(){return `<div class="card"><h2>Cadangan data</h2><div class="gap"><button class="pri" data-a="exp">Unduh cadangan (JSON)</button><label style="display:inline-flex"><input type="file" id="imp" accept=".json"></label><button data-a="expt">Tampilkan teks cadangan</button><button data-a="impt">Muat dari teks</button><button class="x" data-a="reset">Reset ke data awal</button></div><textarea id="bk" rows="4" style="width:100%;margin-top:8px" placeholder="Tekan Tampilkan teks cadangan lalu salin semuanya. Untuk memuat, tempel teks cadangan di sini lalu tekan Muat dari teks."></textarea><p class="hint">Data hanya tersimpan di browser ini. Unduh cadangan secara berkala.</p></div>`}
 
 const dd=m=>m.items.filter(i=>/darurat/i.test(i.n)).reduce((a,i)=>a+rl(i),0);
 const sav=()=>{let c=0,cy=null;return S.months.map(m=>{const y=ym(m)[0];if(y!==cy){cy=y;c=num((S.saldoY||{})[y])}const s=num(m.realIn)-sumR(m),d=0,e=(S.defisit===false&&s<0?0:s)+d;c+=e;return{m,s,d,e,c}})};
@@ -484,6 +597,8 @@ else if(a==='delsub2'){const[p,k]=v.split('|');get(p).sub.splice(+k,1)}
 else if(a==='sync2'){const o=get(v);o.v=(o.sub||[]).reduce((s0,x)=>s0+num(x.t),0)}
 else if(a==='tog')m.items[+v].open=!m.items[+v].open;
 else if(a==='addsub'){const it=m.items[+v],ln=confirm('Lanjutkan sub rincian ini ke bulan-bulan berikutnya?\n\nOK = ya, lanjut ke bulan berikutnya\nBatal = hanya bulan ini');(it.sub=it.sub||[]).push({n:'Sub baru',t:0,z:0,lanjut:ln});it.open=true;if(ln)propSub(m,it,it.sub[it.sub.length-1])}
+else if(a==='expt'){const t=document.getElementById('bk');t.value=JSON.stringify(S);t.focus();t.select();return}
+else if(a==='impt'){try{const d=JSON.parse(document.getElementById('bk').value);if(!d.months)throw 0;S=d;fix();REP=null;save();render()}catch(x){alert('Teks cadangan tidak valid')};return}
 else if(a==='fdl'){const f=(m.files||[]).find(x=>x.id===v);if(f)idbGet(v).then(bl=>{if(!bl)return;const u=URL.createObjectURL(bl),l=document.createElement('a');l.href=u;l.download=f.name;document.body.appendChild(l);l.click();l.remove()});return}
 else if(a==='fview'){const im=document.querySelector('img[data-fid="'+v+'"]');if(im&&im.src)lbox(im.src);return}
 else if(a==='fdel'){const i=(m.files||[]).findIndex(f=>f.id===v);if(i>=0){idbDel(v);m.files.splice(i,1)}}
@@ -514,7 +629,7 @@ else return;
 save();render()});
 document.addEventListener('focusin',e=>{if(e.target.dataset&&e.target.dataset.m)e.target.select()});
 function buildSky(){const s=document.getElementById('sky');if(!s||s.children.length)return;let h='';for(let i=0;i<75;i++){const x=Math.random()*100,y=Math.random()*100,z=Math.random()*2.6+2.2,d=(Math.random()*4+2).toFixed(1),dl=(Math.random()*5).toFixed(1);h+=`<i class="st" style="left:${x}%;top:${y}%;width:${z}px;height:${z}px;animation-duration:${d}s;animation-delay:${dl}s"></i>`}h+='<b class="moon"></b><b class="plt p1"></b><b class="plt p2"></b><b class="sh s1"></b><b class="sh s2"></b><b class="sh s3"></b><b class="fl a1 as"></b><b class="fl a2 as"></b><b class="fl r1">🚀</b><b class="fl r2">🚀</b>';s.innerHTML=h}
-buildSky();render();
+buildSky();initCloud();
 </script>
 </body>
 </html>
