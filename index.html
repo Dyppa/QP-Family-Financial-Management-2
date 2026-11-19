@@ -416,8 +416,42 @@ const idbDel=async k=>{const d=await idb();d.transaction('f','readwrite').object
 function shrink(file){return new Promise(res=>{const u=URL.createObjectURL(file),im=new Image();im.onload=()=>{const s=Math.min(1,1400/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);c.getContext('2d').drawImage(im,0,0,c.width,c.height);c.toBlob(b=>{URL.revokeObjectURL(u);res(b||file)},'image/jpeg',.8)};im.onerror=()=>{URL.revokeObjectURL(u);res(file)};im.src=u})}
 function lbox(src){const d=document.createElement('div');d.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:99;padding:16px';d.innerHTML='<img style="max-width:100%;max-height:100%;border-radius:8px">';d.firstChild.src=src;d.onclick=()=>d.remove();document.body.appendChild(d)}
 async function signedFileUrl(f,download=false){if(!f.path||!sbClient)throw new Error('Lokasi file cloud tidak ditemukan.');const opts=download?{download:f.name}:{};const {data,error}=await sbClient.storage.from('qff-attachments').createSignedUrl(f.path,300,opts);if(error)throw error;return data.signedUrl}
-async function loadImgs(){const fi=document.getElementById('fup');if(fi)fi.onchange=async e=>{const m=M();m.files=m.files||[];const chosen=Array.from(e.target.files||[]);for(const original of chosen){if(m.files.length>=6){alert('Maksimal 6 file per bulan. Hapus salah satu untuk menambah.');break}const isImage=/^image\\//i.test(original.type),isPdf=original.type==='application/pdf'||/\\.pdf$/i.test(original.name);if(!isImage&&!isPdf){alert('Format yang didukung saat ini: foto (JPG, PNG, WebP) dan PDF.');continue}if(original.size>10*1024*1024){alert('Ukuran file maksimal 10 MB: '+original.name);continue}let blob=original,name=original.name;if(isImage){blob=await shrink(original);name=original.name.replace(/\\.[^.]+$/,'')+'.jpg'}const id='f'+Date.now()+Math.random().toString(36).slice(2,8),ext=isImage?'jpg':'pdf',path=cloudUser.id+'/'+m.id+'/'+id+'.'+ext;try{const {error}=await sbClient.storage.from('qff-attachments').upload(path,blob,{contentType:isImage?'image/jpeg':'application/pdf',upsert:false});if(error)throw error;m.files.push({id,name,size:blob.size,path,mime:isImage?'image/jpeg':'application/pdf'});save()}catch(x){alert('Gagal mengunggah '+original.name+': '+(x.message||x));console.error('Upload lampiran:',x)}}render()};document.querySelectorAll('img[data-fid]').forEach(async im=>{try{const f=(M().files||[]).find(x=>x.id===im.dataset.fid);if(!f)return;if(f.path){im.src=await signedFileUrl(f)}else{const b=await idbGet(f.id);if(b)im.src=URL.createObjectURL(b)}}catch(x){console.error('Memuat lampiran:',x)}})}
-function vFiles(){const m=M(),fs=m.files||[];return `<div class="card"><h2>Lampiran ${esc(m.name)} (Foto/PDF)</h2><label style="flex-direction:row;align-items:center;gap:8px"><input type="file" id="fup" accept="image/*,application/pdf,.pdf" multiple ${fs.length>=6?'disabled':''}></label><p class="hint">Unggah foto nota/bukti atau dokumen PDF. Maksimal 6 file per bulan, ukuran maksimal 10 MB per file (${fs.length}/6). Foto diperkecil otomatis. File baru disimpan di Supabase Storage dan dapat dibuka dari perangkat lain.</p>${fs.length?`<div class="fg">${fs.map(f=>`<div class="fi">${f.mime==='application/pdf'||/\\.pdf$/i.test(f.name)?`<button class="imgb" style="height:140px;width:100%;font-size:42px" data-a="fview" data-v="${f.id}" title="Buka PDF">📄</button>`:`<button class="imgb" data-a="fview" data-v="${f.id}" title="Klik untuk memperbesar"><img data-fid="${f.id}" alt="${esc(f.name)}"></button>`}<div class="hint" style="word-break:break-all">${esc(f.name)}</div><button data-a="fdl" data-v="${f.id}">Unduh</button> <button class="x" data-a="fdel" data-v="${f.id}">Hapus</button></div>`).join('')}</div>`:'<p class="hint">Belum ada lampiran.</p>'}</div>`}
+async function loadImgs(){
+  const fi=document.getElementById('fup'),btn=document.getElementById('uploadFiles'),status=document.getElementById('uploadStatus');
+  if(!fi||!btn)return;
+  const say=(msg,ok=false)=>{if(status){status.textContent=msg;status.style.color=ok?'#087443':'#b45309'}};
+  btn.onclick=async()=>{
+    const chosen=Array.from(fi.files||[]);
+    if(!cloudReady||!cloudUser||!sbClient){say('Belum terhubung ke Supabase. Silakan keluar lalu masuk kembali.');return}
+    if(!chosen.length){say('Pilih foto atau PDF terlebih dahulu.');return}
+    const m=M();m.files=m.files||[];btn.disabled=true;btn.textContent='Mengunggah…';
+    let success=0,failed=0;
+    for(const original of chosen){
+      if(m.files.length>=6){say('Maksimal 6 file per bulan.');break}
+      const isImage=/^image\//i.test(original.type),isPdf=original.type==='application/pdf'||/\.pdf$/i.test(original.name);
+      if(!isImage&&!isPdf){failed++;say('Format tidak didukung: '+original.name+' (gunakan JPG, PNG, WebP, atau PDF).');continue}
+      if(original.size>10*1024*1024){failed++;say('Ukuran melebihi 10 MB: '+original.name);continue}
+      try{
+        say('Mengunggah '+original.name+'…');
+        let blob=original,name=original.name;
+        if(isImage){blob=await shrink(original);name=original.name.replace(/\.[^.]+$/,'')+'.jpg'}
+        if(!blob)throw new Error('File tidak dapat diproses oleh browser.');
+        const id='f'+Date.now()+Math.random().toString(36).slice(2,8),ext=isImage?'jpg':'pdf',path=cloudUser.id+'/'+m.id+'/'+id+'.'+ext;
+        const {error}=await sbClient.storage.from('qff-attachments').upload(path,blob,{contentType:isImage?'image/jpeg':'application/pdf',upsert:false});
+        if(error)throw error;
+        m.files.push({id,name,size:blob.size,path,mime:isImage?'image/jpeg':'application/pdf'});save();success++;
+      }catch(x){failed++;console.error('Upload lampiran:',x);say('Gagal mengunggah '+original.name+': '+(x.message||String(x)))}
+    }
+    fi.value='';btn.disabled=false;btn.textContent='Unggah ke Supabase';
+    if(success&&failed===0)say(success+' file berhasil diunggah. Menyinkronkan data…',true);
+    else if(success)say(success+' file berhasil; '+failed+' file gagal. Periksa pesan di atas.');
+    else if(!failed)say('Tidak ada file yang diunggah.');
+    render();
+  };
+  document.querySelectorAll('img[data-fid]').forEach(async im=>{
+    try{const f=(M().files||[]).find(x=>x.id===im.dataset.fid);if(!f)return;if(f.path)im.src=await signedFileUrl(f);else{const b=await idbGet(f.id);if(b)im.src=URL.createObjectURL(b)}}catch(x){console.error('Memuat lampiran:',x)}
+  });
+}function vFiles(){const m=M(),fs=m.files||[];return `<div class="card"><h2>Lampiran ${esc(m.name)} (Foto/PDF)</h2><label style="flex-direction:row;align-items:center;gap:8px"><input type="file" id="fup" accept="image/*,application/pdf,.pdf" multiple ${fs.length>=6?'disabled':''}></label><div class="gap" style="margin-top:10px"><button class="pri" type="button" id="uploadFiles" ${fs.length>=6?'disabled':''}>Unggah ke Supabase</button></div><p id="uploadStatus" class="hint" role="status" aria-live="polite">Pilih file, lalu tekan tombol “Unggah ke Supabase”.</p><p class="hint">Unggah foto nota/bukti atau dokumen PDF. Maksimal 6 file per bulan, ukuran maksimal 10 MB per file (${fs.length}/6). Foto diperkecil otomatis. File baru disimpan di Supabase Storage dan dapat dibuka dari perangkat lain.</p>${fs.length?`<div class="fg">${fs.map(f=>`<div class="fi">${f.mime==='application/pdf'||/\\.pdf$/i.test(f.name)?`<button class="imgb" style="height:140px;width:100%;font-size:42px" data-a="fview" data-v="${f.id}" title="Buka PDF">📄</button>`:`<button class="imgb" data-a="fview" data-v="${f.id}" title="Klik untuk memperbesar"><img data-fid="${f.id}" alt="${esc(f.name)}"></button>`}<div class="hint" style="word-break:break-all">${esc(f.name)}</div><button data-a="fdl" data-v="${f.id}">Unduh</button> <button class="x" data-a="fdel" data-v="${f.id}">Hapus</button></div>`).join('')}</div>`:'<p class="hint">Belum ada lampiran.</p>'}</div>`}
 function vDat(){return vFiles()+vDat0()}
 function vDat0(){return `<div class="card"><h2>Cadangan data</h2><div class="gap"><button class="pri" data-a="exp">Unduh cadangan (JSON)</button><label style="display:inline-flex"><input type="file" id="imp" accept=".json"></label><button data-a="expt">Tampilkan teks cadangan</button><button data-a="impt">Muat dari teks</button><button class="x" data-a="reset">Reset ke data awal</button></div><textarea id="bk" rows="4" style="width:100%;margin-top:8px" placeholder="Tekan Tampilkan teks cadangan lalu salin semuanya. Untuk memuat, tempel teks cadangan di sini lalu tekan Muat dari teks."></textarea><p class="hint">Data hanya tersimpan di browser ini. Unduh cadangan secara berkala.</p></div>`}
 
